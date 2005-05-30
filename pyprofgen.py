@@ -3,22 +3,34 @@
 # -*-python-*-
 
 # $Id$
-
+# pyprofgen: gprof front-end HTML generator
+# Copyright (C) 2005  Seong-Kook Shin <cinsky@gmail.com>
 #
-# This program will be distributed under the GPL after the author stablized
-# this program somewhat more. Thus, DO NOT MODIFY THE CODE.
-# 
-# Copyright (c) 2005  Seong-Kook Shin.
-# All rights reserved.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 
 GPROF_PATH = "/usr/bin/gprof"
 DOT_PATH = "/usr/bin/dot"
 
+PREFIX = "/usr/local"
+
+
 EXE_FILE = "demo"
 MON_FILE = "gmon.out"
 
-DOC_DIR = "prof"
+document_dir = "prof"
 
 # DO NOT TOUCH LINES BELOW ---------------------------------------------------
 
@@ -26,14 +38,14 @@ import os;
 import re;
 import sys;
 import time;
+import getopt;
+import popen2;
 
-HTML_DIR = "%s/html" % DOC_DIR
-MISC_DIR = "%s/misc" % DOC_DIR
-
-LOGO_FILE = "pyprofgen.png"
-CSS_FILE = "pyprofgen.css"
+HTML_DIR = "%s/html" % document_dir
+MISC_DIR = "%s/misc" % document_dir
 
 verbose_mode = 1;
+debug_mode = 0;
 
 DOT_NODE_FONT = "Courier-Bold"
 DOT_LABEL_FONT = "Courier-Bold"
@@ -41,11 +53,90 @@ DOT_EDGE_FONT = "Courier-Bold"
 
 pyprofgen_version = "0.1";
 
+PPG_LIB_DIR = "%s/share/pyprofgen-%s" % (PREFIX, pyprofgen_version)
+LOGO_FILE = "%s/pyprofgen.png" % PPG_LIB_DIR
+CSS_FILE = "%s/pyprofgen.css" % PPG_LIB_DIR
+
+
 def msg_out(msg):
     global verbose_mode;
     if verbose_mode:
         sys.stdout.write(msg);
 	sys.stdout.flush();
+
+def debug(msg):
+    global debug_mode;
+    if debug_mode:
+        sys.stdout.write("debug: %s\n" % msg);
+	sys.stdout.flush();
+
+def tmp_name(prefix = "/tmp/pyprofgen-"):
+    return "%s%u-%f" % (prefix, os.getpid(), time.time());
+
+def error(fin, msg):
+    sys.stdout.flush();
+    sys.stderr.write("error: ");
+    sys.stderr.write(msg);
+    sys.stderr.write("\n");
+    sys.stderr.flush();
+    if fin:
+	sys.exit(fin);
+
+class GrabberException(Exception):
+    def __init__(self, value):
+	self.value = value;
+    def __str__(self):
+	return repr(self.value);
+
+class Grabber:
+    def __init__(self, cmdline, datafile):
+	self.cmdline = "";
+	self.retcode = 0;
+	self.fname = datafile;
+	debug("Grabber: calls popen2.Popen3(%s)" % cmdline);
+	self.opener = popen2.Popen3(cmdline);
+	self.file = None;
+
+	# while True:		# wait for the child termination.
+	#     ret = self.opener.poll();
+	#     if ret != -1:
+	#	 break;
+	self.retcode = self.opener.wait();
+	if self.retcode != 0:
+	    raise GrabberException(1);
+	self.file = open(self.fname, "r"); # may raise IOError or OSError
+
+    def __del__(self):
+	try:
+	    debug("Grabber: removing %s" % self.fname);
+	    os.unlink(self.fname);
+	except OSError:		# self.fname is already removed.
+	    pass;
+
+	if self.file != None:
+	    self.file.close();
+	    
+    def __repr__(self):
+	return "Grabber(\"%s\", \"%s\")" % (self.cmdline, self.fname);
+    
+	
+def execute(cmdline, error_msg = ""):
+    global verbose_mode;
+    fin, fout, ferr = os.popen3(cmdline);
+    fin.close();
+    errmsg = ferr.readline();
+    if errmsg:
+	if verbose_mode:
+	    error(0, errmsg);
+	if verbose_mode:
+	    error(0, "cannot execute \"%s\"" % cmdline);
+	if error_msg:
+	    error(1, error_msg);
+	else:
+	    sys.exit(1);
+    ferr.close();
+    return fout;
+
 
 def pyprofgen_footer(fd):
     datestr = time.ctime(time.time());
@@ -59,28 +150,33 @@ def pyprofgen_footer(fd):
     fd.write("  %s </small></address>\n" % pyprofgen_version);
 
 def pyprofgen_header(fd, title, css):
-    fd.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>");
-    fd.write("<!DOCTYPE html PUBLIC\n");
-    fd.write("  \"-//W3C//DTD XHTML 1.0 Transitional//EN\"");
-    fd.write("  \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">");
+    fd.write("""\
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC
+  "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
-    fd.write("<html xmlns=\"http://www.w3.org/1999/xhtml\"\n");
-    fd.write("      xml:lang=\"en\" lang=\"en\">\n");
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xml:lang="en" lang="en">
 
-    fd.write("<head>\n");
-    fd.write(" <meta http-equiv=\"Content-Type\"\n");
-    fd.write("       content=\"text/html; charset=iso-8859-1\"/>\n");
+<head>
+  <meta http-equiv="Content-Type"
+        content="text/html; charset=iso-8859-1"/>\n""");
+
     fd.write(" <link rel=\"stylesheet\" type=\"text/css\" \n");
     fd.write("       href=\"%s\" title=\"default\"></link>\n" % css);
     fd.write(" <title>%s</title>\n" % title);
-    fd.write("</head>\n");
-    fd.write("<body>\n");
-    fd.write("<div class=\"qindex\">\n");
-    fd.write(" <a class=\"qindex\" href=\"index.html\">Main</a>\n");
-    fd.write("| <a class=\"qindex\" href=\"prof_flat.html\">Flat Profile</a>\n");
-    fd.write("| <a class=\"qindex\" href=\"prof_cgraph.html\">Call Graph List</a>\n");
-    fd.write("  | ...\n");
-    fd.write("</div>\n");
+
+    fd.write("""
+</head>
+
+<body>
+  <div class=\"qindex\">
+    <a class=\"qindex\" href=\"index.html\">Main</a> |
+    <a class=\"qindex\" href=\"prof_flat.html\">Flat Profile</a> |
+    <a class=\"qindex\" href=\"prof_cgraph.html\">Call Graph List</a> |
+    ...
+  </div>\n""");
 
 class image_map:
     map_entries = [];
@@ -163,16 +259,19 @@ class call_graph:
 	self.tm_time = time;
 
     def write_html(self, fd):
-        fd.write("<table>\n");
-        fd.write("<tr><th class=\"fragment\">Index</th>\n");
-	fd.write("    <th class=\"fragment\">Time</th>\n");
-	fd.write("    <th class=\"fragment\">Self</th>\n");
-        fd.write("    <th class=\"fragment\">Children</th>\n");
-	fd.write("    <th class=\"fragment\">Called</th>\n");
-        fd.write("    <th class=\"fragment\">C. Overall</th>\n");
-	fd.write("    <th class=\"fragment\">C. Recurse</th>\n");
-        fd.write("    <th class=\"fragment\">Cycle</th>");
-        fd.write("    <th class=\"fragment\">Name</th></tr>\n");
+        fd.write("""
+<table>
+  <tr>
+    <th class=\"fragment\">Index</th>
+    <th class=\"fragment\">Time</th>
+    <th class=\"fragment\">Self</th>
+    <th class=\"fragment\">Children</th>
+    <th class=\"fragment\">Called</th>
+    <th class=\"fragment\">C. Overall</th>
+    <th class=\"fragment\">C. Recurse</th>
+    <th class=\"fragment\">Cycle</th>
+    <th class=\"fragment\">Name</th>
+  </tr>\n""");
 
         i = 0;
         while i < len(self.callee):
@@ -226,48 +325,46 @@ class flat_entry:
     
 
 class index_builder:
-    f_out = None;
-    gprof_version = "";
-    n_his = 0;			# # of histogram
-    n_cg = 0;			# # of call graph
-    n_bbc = 0;			# # of basic-block count record
-    lineno = 0;
-
     def __init__(self, exefile, monfile):
-	gprof_version = "";
-	mon_version = "";
-	n_his = 0;
-	n_cg = 0;
-	n_bbc = 0;
-	lineno = 0;
-        shstr = "%s -i %s %s" % ( GPROF_PATH, exefile, monfile);
-        f_in, self.f_out, f_err = os.popen3(shstr);
-        f_in.close();
+	self.gprof_version = "";
+	self.mon_version = "";
+	self.n_his = 0;
+	self.n_cg = 0;
+	self.n_bbc = 0;
+	self.lineno = 0;
+	self.iprof = None;
+	self.vprof = None;
+
+	tmpfile = tmp_name();
+        shstr = "%s -i %s %s >%s 2>/dev/null" % \
+	    ( GPROF_PATH, exefile, monfile, tmpfile);
+
+	self.iprof = Grabber(shstr, tmpfile);
+        #self.f_out = execute(shstr, "Perhaps GPROF_PATH is invalid");
         lineno = 0;
-	
+
+	tmpfile = tmp_name();
+	shstr = "%s --version >%s 2>/dev/null" % (GPROF_PATH, tmpfile);
+	self.vprof = Grabber(shstr, tmpfile);
+
     def parse_summary(self):
-	line = self.f_out.readline();
+	line = self.iprof.file.readline();
 	self.lineno = self.lineno + 1;
 	self.mon_version = re.compile(r"[^(]*\((.*)\)").match(line).group(1);
 
-	line = self.f_out.readline();
+	line = self.iprof.file.readline();
 	self.lineno = self.lineno + 1;
 	self.n_his = int(re.compile(r"[\t\v ]*([0-9]+)").match(line).group(1));
 
-	line = self.f_out.readline();
+	line = self.iprof.file.readline();
 	self.lineno = self.lineno + 1;
 	self.n_cg = int(re.compile(r"[\t\v ]*([0-9]+)").match(line).group(1));
 
-	line = self.f_out.readline();
+	line = self.iprof.file.readline();
 	self.lineno = self.lineno + 1;
 	self.n_bbc = int(re.compile(r"[\t\v ]*([0-9]+)").match(line).group(1));
 
-	self.f_out.close();
-
-        shstr = "%s --version" % GPROF_PATH;
-        f_in, self.f_out, f_err = os.popen3(shstr);
-	f_in.close();
-	self.gprof_version = self.f_out.readline();
+	self.gprof_version = self.vprof.file.readline();
 
     def build_index_file(self, html_dir):
         if not os.access(html_dir, os.F_OK):
@@ -278,10 +375,25 @@ class index_builder:
 	fd = open(idxfile, "w");
 	pyprofgen_header(fd, "Profile Data: %s" % EXE_FILE, "pyprofgen.css");
 	fd.write("<h1>Profiling Data: %s</h1>\n" % EXE_FILE);
-	fd.write("<h2>Introduction</h2>\n");
-	fd.write("<p>Profiling allows you to learn where your program spent its time and which functions called which other functions while it was executing. This information can show you which pieces of your program are slower than you expected, and might be candidates for rewriting to make your program execute faster.  It can also tell you which functions are being called more or less often than you expected.  This may help you spot bugs that had otherwise been unnoticed.</p>");
+	fd.write("""
+<h2>Introduction</h2>
+<p>
+  Profiling allows you to learn where your program spent its time and
+  which functions called which other functions while it was executing.
+  This information can show you which pieces of your program are slower
+  than you expected, and might be candidates for rewriting to make your
+  program execute faster.  It can also tell you which functions are being
+  called more or less often than you expected.  This may help you spot bugs
+  that had otherwise been unnoticed.
+</p>
 
-	fd.write("<p>Since the profiler uses information collected during the actual execution of your program, it can be used on programs that are too large or too complex to analyze by reading the source.  However, how your program is run will affect the information that shows up in the profile data.  If you don't use some feature of your program while it is being profiled, no profile information will be generated for that feature.</p>\n");
+<p>
+  Since the profiler uses information collected during the actual execution
+  of your program, it can be used on programs that are too large or too 
+  complex to analyze by reading the source.  However, how your program is
+  run will affect the information that shows up in the profile data.  If 
+  you don't use some feature of your program while it is being profiled, 
+  no profile information will be generated for that feature.</p>\n""");
 
 	fd.write("<h2>Summary</h2>\n");
 	fd.write("<center>\n");
@@ -305,19 +417,19 @@ class index_builder:
 	msg_out("\n");
 
 class fgraph_builder:
-    f_out = None;
-    lineno = 0;
-    entries = [];
     def __init__(self, exefile, monfile):
-        shstr = "%s -b -p %s %s" % ( GPROF_PATH, exefile, monfile);
-        f_in, self.f_out, f_err = os.popen3(shstr);
-        f_in.close();
-        lineno = 0;
+	self.entries = [];
+        self.lineno = 0;
+	tmpfile = tmp_name();
+        shstr = "%s -b -p %s %s >%s 2>/dev/null" % \
+	    ( GPROF_PATH, exefile, monfile, tmpfile);
+	self.flat = Grabber(shstr, tmpfile);
+        #self.f_out = execute(shstr, "Perhaps GPROF_PATH is invalid");
         
     def eatup_header(self):
-        "Eatup the caller table header from gprof output"
+        # Eat first 5 lines from the output.
         while True:
-            line = self.f_out.readline();
+            line = self.flat.file.readline();
             self.lineno = self.lineno + 1;
             if not line:
                 break;
@@ -327,7 +439,7 @@ class fgraph_builder:
     def parse_fgraph(self):
         self.eatup_header();
         while True:
-            line = self.f_out.readline();
+            line = self.flat.file.readline();
             self.lineno = self.lineno + 1;
             if not line:
                 break;
@@ -339,36 +451,68 @@ class fgraph_builder:
                                            float(tokens[4]), \
                                            float(tokens[5]), \
                                            tokens[6]));
-        self.f_out.close();
         
     def write_html(self, fd):
-        fd.write("<table>\n");
-        fd.write("<tr><th>Time</th><th>Cumulative Seconds</th>\n");
-        fd.write("    <th>Self seconds</th><th>Calls</th>\n");
-        fd.write("    <th>Self ms/call</th>\n");
-        fd.write("    <th>Total ms/call</th><th>Name</th></tr>\n");
+        fd.write("""
+<table>
+  <tr>
+    <th>Time</th>
+    <th>Cumulative Seconds</th>
+    <th>Self seconds</th>
+    <th>Calls</th>
+    <th>Self ms/call</th>
+    <th>Total ms/call</th>
+    <th>Name</th>
+  </tr>\n""");
         for entry in self.entries:
-            fd.write("<tr>\n");
-            fd.write("  <td class=\"right\">%.2f</td>" % entry.tm_time);
-            fd.write("  <td class=\"right\">%.2f</td>" % entry.tm_csec);
-            fd.write("  <td class=\"right\">%.2f</td>" % entry.tm_self);
-            fd.write("  <td class=\"right\">%d</td>" % entry.calls);
-            fd.write("  <td class=\"right\">%.2f</td>" % entry.tm_call_self);
-            fd.write("  <td class=\"right\">%.2f</td>" % entry.tm_call);
-            fd.write("  <td class=\"left\">%s</td>" % entry.name);
-            fd.write("</tr>\n");
-        fd.write("</table>\n");
+            fd.write("""
+  <tr>
+    <td class=\"right\">%.2f</td>
+    <td class=\"right\">%.2f</td>
+    <td class=\"right\">%.2f</td>
+    <td class=\"right\">%d</td>
+    <td class=\"right\">%.2f</td>
+    <td class=\"right\">%.2f</td>
+    <td class=\"left\">%s</td>
+  </tr>\n""" % (entry.tm_time, entry.tm_csec, entry.tm_self, \
+		entry.calls, entry.tm_call_self, entry.tm_call, \
+		entry.name));
+
+	fd.write("</table>\n");
 
     def write_flat_footnote(self, fd):
-	fd.write("<h2>Glossary</h2>\n");
-        fd.write("<ul><li><strong>Time</strong> -- This is the percentage of the total execution time your program spent in this function.  These should all add up to 100%.</li>\n");
-        fd.write("<li><strong>Cumulative Seconds</strong> -- This is the cumulative total number of seconds the computer spent executing this functions, plus the time spent in all the functions above this one in this table.</li>\n");
-        fd.write("<li><strong>Self Seconds</strong> -- This is the number of seconds accounted for by this function alone. The flat profile listing is sorted first by this number.</li>\n");
-        fd.write("<li><strong>Calls</strong> -- This is the total number of times the function was called.  If the function was never called, or the number of times it was called cannot be determined (probably because the function was not compiled with profiling enabled), the \"calls\" field is blank.</li>\n");
-        fd.write("<li><strong>Self ms/call</strong> -- This represents the average number of milliseconds spent in this function per call, if this function is profiled.  Otherwise, this field is blank for this function.</li>\n");
-        fd.write("<li><strong>Total ms/call</strong> -- This represents the average number of milliseconds spent in this function and its descendants per call, if this function is profiled.  Otherwise, this field is blank for this function.  This is the only field in the flat profile that uses call graph analysis.</li>\n");
-        fd.write("<li><strong>Name</strong> -- This is the name of the function.   The flat profile is sorted by this field alphabetically after the \"self seconds\" and \"calls\" fields are sorted.</li></ul>\n");
-        
+	fd.write("""
+<h2>Glossary</h2>
+  <ul>
+    <li><strong>Time</strong> -- 
+      This is the percentage of the total execution time your program spent
+      in this function.  These should all add up to 100%.</li>
+    <li><strong>Cumulative Seconds</strong> -- 
+      This is the cumulative total number of seconds the computer spent 
+      executing this functions, plus the time spent in all the functions
+      above this one in this table.</li>
+    <li><strong>Self Seconds</strong> -- 
+      This is the number of seconds accounted for by this function alone. 
+      The flat profile listing is sorted first by this number.</li>
+    <li><strong>Calls</strong> -- 
+      This is the total number of times the function was called.  If the 
+      function was never called, or the number of times it was called cannot
+      be determined (probably because the function was not compiled with
+      profiling enabled), the \"calls\" field is blank.</li>
+    <li><strong>Self ms/call</strong> -- 
+      This represents the average number of milliseconds spent in this function
+      per call, if this function is profiled.  Otherwise, this field is blank 
+      for this function.</li>
+    <li><strong>Total ms/call</strong> -- 
+      This represents the average number of milliseconds spent in this 
+      function and its descendants per call, if this function is profiled.
+      Otherwise, this field is blank for this function.  This is the only 
+      field in the flat profile that uses call graph analysis.</li>
+    <li><strong>Name</strong> -- 
+      This is the name of the function. The flat profile is sorted by this
+      field alphabetically after the \"self seconds\" and \"calls\" fields
+      are sorted.</li>
+  </ul>\n""");
 
     def build_html_file(self, html_dir):
         if not os.access(html_dir, os.F_OK):
@@ -377,9 +521,17 @@ class fgraph_builder:
 
         fd = open(htmlfile, "w");
 	pyprofgen_header(fd, "Pyprof -- Flat Profile", "pyprofgen.css");
-        fd.write("<h1>Flat Profile</h1>\n");
-	fd.write("<p>The &quot;flat profile&quot; shows the total amount of time your program spent executing each function.  Functions with no apparent time spent in them, and no apparent calls to them, are not mentioned.  Note that if a function was not compiled for profiling, and didn't run long enough to show up on the program counter histogram, it will be indistinguishable from a function that was never called.</p>\n");
-        fd.write("<center>\n");
+        fd.write("""
+<h1>Flat Profile</h1>
+<p>
+  The &quot;flat profile&quot; shows the total amount of time your program
+  spent executing each function.  Functions with no apparent time spent in
+  them, and no apparent calls to them, are not mentioned.  Note that if a 
+  function was not compiled for profiling, and didn't run long enough to
+  show up on the program counter histogram, it will be indistinguishable
+  from a function that was never called.
+</p>
+<center>\n""");
         self.write_html(fd);
         fd.write("</center>\n");
 
@@ -389,20 +541,20 @@ class fgraph_builder:
         fd.close();
         
 class cgraph_builder:
-    lineno = 0;
-    f_out = None;
-    f_err = file;
-    gid = 0;
-    tm_time = 0;
     def __init__(self, exefile, monfile):
-        shstr = "%s -b -q %s %s" % ( GPROF_PATH, exefile, monfile );
-        f_in, self.f_out, f_err = os.popen3(shstr);
-        f_in.close();
+	self.lineno = 0;
+	self.gid = 0;
+	self.tm_time = 0;
+	tmpfile = tmp_name();
+        shstr = "%s -b -q %s %s >%s 2>/dev/null" % \
+	    (GPROF_PATH, exefile, monfile, tmpfile);
+	self.cprof = Grabber(shstr, tmpfile);
+        #self.f_out = execute(shstr, "Perhaps GPROF_PATH is invalid");
 
     def eatup_header(self):
         "Eatup the caller table header from gprof output"
         while True:
-            line = self.f_out.readline();
+            line = self.cprof.file.readline();
             self.lineno = self.lineno + 1;
             if not line:
                 break
@@ -500,7 +652,7 @@ class cgraph_builder:
         self.eatup_header();
 	msg_out("Parse call graph(s):");
         while True:
-            line = self.f_out.readline();
+            line = self.cprof.file.readline();
             self.lineno = self.lineno + 1;
             if not line:
                 break;
@@ -543,14 +695,34 @@ class cgraph_builder:
 	msg_out(".");
 
     def write_call_footnote(self, fd):
-	fd.write("<h2>Glossary</h2>\n");
-	fd.write("<ul>\n");
-	fd.write("<li><strong>Index</strong> -- Entries are numbered with consecutive integers.  Each function therefore has an index number, which appears at the beginning of its primary line.  Each cross-reference to a function, as a caller or subroutine of another, gives its index number as well as its name.  The index number guides you if you wish to look for the entry for that function.</li>\n");
-	fd.write("<li><strong>Time</strong> -- This is the percentage of the total time that was spent in this function, including time spent in subroutines called from this function. The time spent in this function is counted again for the callers of this function.  Therefore, adding up these percentages is meaningless.</li>\n");
-	fd.write("<li><strong>Self</strong> -- This is the total amount of time spent in this function.  This should be identical to the number printed in the `seconds' field for this function in the flat profile.</li>\n");
-	fd.write("<li><strong>Children</strong> -- This is the total amount of time spent in the subroutine calls made by this function.  This should be equal to the sum of all the `self' and `children' entries of the children listed directly below this function.</li>\n");
-	fd.write("<li><strong>Called</strong> -- This is the number of times the function was called. If the function called itself recursively, there are two numbers, separated by a `+'.  The first number counts non-recursive calls, and the second counts recursive calls. </li>\n");
-	fd.write("<li><strong>Name</strong> -- This is the name of the current function.  The index number is repeated after it.</li></ul>\n");
+	fd.write("""
+<h2>Glossary</h2>
+<ul>
+  <li><strong>Index</strong> -- Entries are numbered with consecutive
+    integers.  Each function therefore has an index number, which appears
+    at the beginning of its primary line.  Each cross-reference to a
+    function, as a caller or subroutine of another, gives its index number
+    as well as its name.  The index number guides you if you wish to look
+    for the entry for that function.</li>
+  <li><strong>Time</strong> -- This is the percentage of the total time that
+    was spent in this function, including time spent in subroutines called 
+    from this function. The time spent in this function is counted again 
+    for the callers of this function.  Therefore, adding up these percentages
+    is meaningless.</li>
+  <li><strong>Self</strong> -- This is the total amount of time spent in
+    this function.  This should be identical to the number printed in the
+    `seconds' field for this function in the flat profile.</li>
+  <li><strong>Children</strong> -- This is the total amount of time spent
+    in the subroutine calls made by this function.  This should be equal
+    to the sum of all the `self' and `children' entries of the children
+    listed directly below this function.</li>
+  <li><strong>Called</strong> -- This is the number of times the function
+    was called. If the function called itself recursively, there are two
+    numbers, separated by a `+'.  The first number counts non-recursive
+    calls, and the second counts recursive calls. </li>
+  <li><strong>Name</strong> -- This is the name of the current function.
+    The index number is repeated after it.</li>
+</ul>\n""");
 
     def create_html_file(self, gid, html_dir, misc_dir):
         #htmlfile, dotfile, mapfile):
@@ -563,10 +735,18 @@ class cgraph_builder:
         imap = image_map(mapfile);
         name = cgraph_dict[gid].callee[cgraph_dict[gid].index].name;
 	pyprofgen_header(f_html, "PyProfGen -- %s" % name, "pyprofgen.css");
-        f_html.write("<h1>Call graph of &quot;<em>%s</em>&quot;</h1>\n" % name);
-	f_html.write("<p>The &quot;call graph&quot; shows how much time was spent in each function and its children.  From this information, you can find functions that, while they themselves may not have used much time, called other functions that did use unusual amounts of time.</p>\n");
-	f_html.write("<h2>Call Graph</h2>\n");
-        f_html.write("<center><img src=\"%s\" border=\"0\" usemap=\"#prof_g_%d_map\"></img></center>" % (imgfile, gid));
+        f_html.write("<h1>Call graph of &quot;<em>%s</em>&quot;</h1>" % name);
+	f_html.write("""
+<p>
+  The &quot;call graph&quot; shows how much time was spent in each
+  function and its children.  From this information, you can find
+  functions that, while they themselves may not have used much time,
+  called other functions that did use unusual amounts of time.
+
+<h2>Call Graph</h2>""");
+        f_html.write("""
+<center><img src=\"%s\" border=\"0\"
+             usemap=\"#prof_g_%d_map\"></img></center>""" % (imgfile, gid));
         imap.write("prof_g_%d_map" % gid, f_html);
         f_html.write("<hr></hr>\n");
 	f_html.write("<center>\n");
@@ -607,15 +787,25 @@ class cgraph_builder:
             os.makedirs(html_dir);
 	fd = open(listfile, "w");
 	pyprofgen_header(fd, "PyProfGen -- Call Graph List", "pyprofgen.css");
-        fd.write("<h1>List of Call Graphs</h1>\n");
-	fd.write("<p>This is the list of all call graphs that the profiler recognized.  Simply follow the link in the last field to see each call graph.</p>\n");
-        fd.write("<center>\n");
-	fd.write("<table>\n");
-        fd.write("<tr><th>Index</th><th>Time</th><th>Self</th>\n");
-        fd.write("    <th>Children</th><th>Called</th>\n");
-        fd.write("    <th>C. Overall</th><th>C. Recurse</th>\n");
-        fd.write("    <th>Cycle</th>");
-        fd.write("    <th>Name</th></tr>\n");
+        fd.write("""
+<h1>List of Call Graphs</h1>
+<p>
+  This is the list of all call graphs that the profiler recognized.
+  Simply follow the link in the last field to see each call graph.
+</p>
+<center>\n");
+<table>\n");
+  <tr>
+    <th>Index</th>
+    <th>Time</th>
+    <th>Self</th>
+    <th>Children</th>
+    <th>Called</th>
+    <th>C. Overall</th>
+    <th>C. Recurse</th>
+    <th>Cycle</th>
+    <th>Name</th>
+  </tr>\n""");
 
 	for cg_id, cg in cgraph_dict.iteritems():
 	    callee = cg.callee[cg.index];
@@ -703,8 +893,71 @@ class cgraph_builder:
         if outf != sys.stdout:
             outf.close();
 
-def main():            
-    print "pyprofgen version %s  " % pyprofgen_version
+def version():
+    print "pyprofgen version %s" % pyprofgen_version;
+
+def usage():
+    print """\
+USAGE: pyprofgen [OPTION...] executable [gmon.out]
+Generate HTML documents from gmon.out
+
+  -d DIR,               Set the output directory to DIR,
+      --directory=DIR     (default: doc)
+  -q, --quiet           Quite mode, (default: verbose mode)
+  -h, --help            Show help message
+  -v, --version         Print version information
+
+Report bugs to <cinsky@gmail.com>.
+
+"""
+
+def main():
+    global verbose_mode, document_dir;
+    global MON_FILE, EXE_FILE;
+    try:
+	opts, arg = getopt.getopt(sys.argv[1:], "d:qhv", \
+				  ["help", "directory=", "quiet", "version" \
+				   "debug"]);
+    except getopt.GetoptError:
+	usage();
+	sys.exit(1);
+    for o, a in opts:
+	if o in ("-v", "--version"):
+	    version();
+	    sys.exit(0);
+	if o in ("-h", "--help"):
+	    usage();
+	    sys.exit(0);
+	if o in ("-q", "--quiet"):
+	    verbose_mode = 0;
+	if o in ("-d", "--directory"):
+	    document_dir = a;
+	if o == "--debug":
+	    debug_mode = 1;
+
+    if len(arg) != 1 and len(arg) != 2:
+	error(0, "wrong number of argument(s).")
+	error(1, "use '-h' option for more.")
+	
+    EXE_FILE = arg[0];
+    if len(arg) == 2:
+	MON_FILE = arg[1];
+    else:
+	MON_FILE = "gmon.out"
+
+    if not os.access(EXE_FILE, os.R_OK):
+	error(1, "cannot access \"%s\", permission denied." % EXE_FILE);
+
+    if not os.access(MON_FILE, os.R_OK):
+	error(1, "cannot access \"%s\", permission denied." % MON_FILE);
+
+    # grabber = Grabber("/bin/ls > tmp.tmp", "tmp.tmp");
+    # grabber.grab();
+
+#def dummy():
+    # generate
+    msg_out("pyprofgen version %s  \n" % pyprofgen_version)
+
     cbuilder = cgraph_builder(EXE_FILE, MON_FILE);
     cbuilder.parse_cgraph();
     cbuilder.build_misc_files(MISC_DIR);
@@ -721,3 +974,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
