@@ -2,7 +2,7 @@
 
 # You MUST not leave trailing '/' in PREFIX.
 ifndef PREFIX
-	PREFIX="/usr/local"
+	PREFIX=/usr/local
 endif
 
 INSTALL=/usr/bin/install
@@ -10,7 +10,7 @@ INSTALL=/usr/bin/install
 
 
 PPG_BIN_DIR = $(PREFIX)/bin
-PPG_LIB_DIR = $(PREFIX)/share/pyprofgen-0.1
+PPG_LIB_DIR = $(PREFIX)/share/pyprofgen-0.2
 
 ESC_PREFIX=$(shell echo $(PREFIX) | sed -e 's/\//\\\//g')
 
