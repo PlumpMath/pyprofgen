@@ -51,7 +51,7 @@ DOT_NODE_FONT = "Courier-Bold"
 DOT_LABEL_FONT = "Courier-Bold"
 DOT_EDGE_FONT = "Courier-Bold"
 
-pyprofgen_version = "0.1";
+pyprofgen_version = "0.2";
 
 PPG_LIB_DIR = "%s/share/pyprofgen-%s" % (PREFIX, pyprofgen_version)
 LOGO_FILE = "%s/pyprofgen.png" % PPG_LIB_DIR
@@ -144,7 +144,7 @@ def pyprofgen_footer(fd):
     fd.write("<address style=\"align: right;\">\n");
     fd.write("<small>Generated on %s for " % datestr);
     fd.write("<strong>%s</strong> by&nbsp;\n" % EXE_FILE);
-    fd.write("<a href=\"http://www.cinsk.org/sw/pyprof/\"><img\n");
+    fd.write("<a href=\"http://www.cinsk.org/sw/pyprofgen/\"><img\n");
     fd.write("  src=\"pyprofgen.png\" alt=\"pyprofgen\"\n");
     fd.write("  align=\"middle\" border=\"0\"></a> ");
     fd.write("  %s </small></address>\n" % pyprofgen_version);
