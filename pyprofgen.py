@@ -51,7 +51,7 @@ DOT_NODE_FONT = "Courier-Bold"
 DOT_LABEL_FONT = "Courier-Bold"
 DOT_EDGE_FONT = "Courier-Bold"
 
-pyprofgen_version = "0.2";
+pyprofgen_version = "0.3";
 
 
 PPG_LIB_DIR = "";
