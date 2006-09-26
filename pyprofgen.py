@@ -1,6 +1,5 @@
 #!/usr/bin/python
-#
-# -*-python-*-
+# -*- coding: iso-8859-1 -*-
 
 # $Id$
 # pyprofgen: gprof front-end HTML generator
@@ -32,6 +31,7 @@ MON_FILE = "gmon.out"
 
 document_dir = "prof"
 
+
 # DO NOT TOUCH LINES BELOW ---------------------------------------------------
 
 import os;
@@ -53,25 +53,17 @@ DOT_EDGE_FONT = "Courier-Bold"
 
 pyprofgen_version = "0.2";
 
-PPG_LIB_DIR = "%s/share/pyprofgen-%s" % (PREFIX, pyprofgen_version)
-LOGO_FILE = "%s/pyprofgen.png" % PPG_LIB_DIR
-CSS_FILE = "%s/pyprofgen.css" % PPG_LIB_DIR
 
+PPG_LIB_DIR = "";
+LOGO_FILE = "";
+CSS_FILE = "";
 
-def msg_out(msg):
-    global verbose_mode;
-    if verbose_mode:
-        sys.stdout.write(msg);
-	sys.stdout.flush();
-
+
 def debug(msg):
     global debug_mode;
     if debug_mode:
         sys.stdout.write("debug: %s\n" % msg);
 	sys.stdout.flush();
-
-def tmp_name(prefix = "/tmp/pyprofgen-"):
-    return "%s%u-%f" % (prefix, os.getpid(), time.time());
 
 def error(fin, msg):
     sys.stdout.flush();
@@ -82,6 +74,58 @@ def error(fin, msg):
     if fin:
 	sys.exit(fin);
 
+def msg_out(msg):
+    global verbose_mode;
+    if verbose_mode:
+        sys.stdout.write(msg);
+	sys.stdout.flush();
+
+
+def init():
+    global PPG_LIB_DIR, LOGO_FILE, CSS_FILE;
+
+    PPG_LIB_DIR = "%s/share/pyprofgen-%s" % (PREFIX, pyprofgen_version)
+    if not os.path.exists(PPG_LIB_DIR):
+        debug("sanity check: %s not found" % PPG_LIB_DIR);
+        PPG_LIB_DIR = "%s/share/pyprofgen" % PREFIX;
+        if not os.path.exists(PPG_LIB_DIR):
+            debug("sanity check: %s not found" % PPG_LIB_DIR);
+            PPG_LIB_DIR = "./lib";
+            if not os.path.exists(PPG_LIB_DIR):
+                debug("sanity check: %s not found" % PPG_LIB_DIR);
+                error(1, "pyprofgen is not properly installed.");
+
+    debug("sanity check: %s found" % PPG_LIB_DIR);
+
+    LOGO_FILE = "%s/pyprofgen.png" % PPG_LIB_DIR;
+    CSS_FILE = "%s/pyprofgen.css" % PPG_LIB_DIR;
+
+    if not os.path.exists(LOGO_FILE):
+        error(1, "logo file(%s) not found", LOGO_FILE);
+    if not os.path.exists(CSS_FILE):
+        error(1, "CSS file(%s) not found", CSS_FILE);
+
+def tmp_name(prefix = "/tmp/pyprofgen-"):
+    return "%s%u-%f" % (prefix, os.getpid(), time.time());
+
+def execute(cmdline, error_msg = ""):
+    global verbose_mode;
+    fin, fout, ferr = os.popen3(cmdline);
+    fin.close();
+    errmsg = ferr.readline();
+    if errmsg:
+	if verbose_mode:
+	    error(0, errmsg);
+	if verbose_mode:
+	    error(0, "cannot execute \"%s\"" % cmdline);
+	if error_msg:
+	    error(1, error_msg);
+	else:
+	    sys.exit(1);
+    ferr.close();
+    return fout;
+
+
 class GrabberException(Exception):
     def __init__(self, value):
 	self.value = value;
@@ -120,24 +164,7 @@ class Grabber:
 	return "Grabber(\"%s\", \"%s\")" % (self.cmdline, self.fname);
     
 	
-def execute(cmdline, error_msg = ""):
-    global verbose_mode;
-    fin, fout, ferr = os.popen3(cmdline);
-    fin.close();
-    errmsg = ferr.readline();
-    if errmsg:
-	if verbose_mode:
-	    error(0, errmsg);
-	if verbose_mode:
-	    error(0, "cannot execute \"%s\"" % cmdline);
-	if error_msg:
-	    error(1, error_msg);
-	else:
-	    sys.exit(1);
-    ferr.close();
-    return fout;
-
-
+
 def pyprofgen_footer(fd):
     datestr = time.ctime(time.time());
     fd.write("<hr size=\"1\">\n");
@@ -178,6 +205,8 @@ def pyprofgen_header(fd, title, css):
     ...
   </div>\n""");
 
+
+
 class image_map:
     map_entries = [];
     def __init__(self, mapfile):
@@ -200,6 +229,7 @@ class image_map:
         fd.write("</map>\n");
          
             
+
 class callee_entry:
     "An entry of the call graph, this is the basic unit"
     
@@ -231,6 +261,8 @@ class callee_entry:
 	     self.called, self.called_overall, self.called_recurse, \
 	     self.name, self.cycle, self.refer);
 
+
+
 class call_graph:
     "A call graph is a dictionary of callee_entry"
     callee = []			# A list of callees
@@ -299,6 +331,7 @@ class call_graph:
         
 cgraph_dict = dict([])                        # gdict is a dictionary of graph
 
+
 class flat_entry:
     tm_time = 0;
     tm_csec = 0;
@@ -324,6 +357,7 @@ class flat_entry:
 	     self.tm_call_self, self.tm_call, self.name);
     
 
+
 class index_builder:
     def __init__(self, exefile, monfile):
 	self.gprof_version = "";
@@ -416,6 +450,8 @@ class index_builder:
 	pyprofgen_footer(fd);
 	msg_out("\n");
 
+
+
 class fgraph_builder:
     def __init__(self, exefile, monfile):
 	self.entries = [];
@@ -427,13 +463,10 @@ class fgraph_builder:
         #self.f_out = execute(shstr, "Perhaps GPROF_PATH is invalid");
         
     def eatup_header(self):
-        # Eat first 5 lines from the output.
+        # Eat the header strings from the output.
         while True:
             line = self.flat.file.readline();
-            self.lineno = self.lineno + 1;
-            if not line:
-                break;
-            if self.lineno >= 5:
+            if re.compile("^[ ]*time[ ]+second").match(line):
                 break;
 
     def parse_fgraph(self):
@@ -540,6 +573,8 @@ class fgraph_builder:
 	fd.write("</body></html>\n");
         fd.close();
         
+
+
 class cgraph_builder:
     def __init__(self, exefile, monfile):
 	self.lineno = 0;
@@ -675,6 +710,7 @@ class cgraph_builder:
 		cgraph.set_index(len(cgraph.callee) - 1);
 		cgraph.set_time(self.tm_time);
 	msg_out("\n");
+        
     def create_img_file(self, gid, html_dir, misc_dir):
         dotfile = "%s/prof_g_%d.dot" % (misc_dir, gid);
         imgfile = "%s/prof_g_%d.png" % (html_dir, gid);
@@ -762,6 +798,7 @@ class cgraph_builder:
         del imap;
         # msg_out("done.\n");
         msg_out(".");
+        
     def build_misc_files(self, misc_dir):
         if not os.access(misc_dir, os.F_OK):
             os.makedirs(misc_dir);
@@ -893,6 +930,8 @@ class cgraph_builder:
         if outf != sys.stdout:
             outf.close();
 
+
+
 def version():
     print "pyprofgen version %s" % pyprofgen_version;
 
@@ -911,16 +950,20 @@ Report bugs to <cinsky@gmail.com>.
 
 """
 
+
 def main():
     global verbose_mode, document_dir;
     global MON_FILE, EXE_FILE;
+    global debug_mode, HTML_DIR, MISC_DIR, PPG_LIB_DIR;
+    
     try:
-	opts, arg = getopt.getopt(sys.argv[1:], "d:qhv", \
-				  ["help", "directory=", "quiet", "version" \
+	opts, arg = getopt.getopt(sys.argv[1:], "d:qhvD", \
+				  ["help", "directory=", "quiet", "version", \
 				   "debug"]);
     except getopt.GetoptError:
 	usage();
 	sys.exit(1);
+        
     for o, a in opts:
 	if o in ("-v", "--version"):
 	    version();
@@ -932,9 +975,17 @@ def main():
 	    verbose_mode = 0;
 	if o in ("-d", "--directory"):
 	    document_dir = a;
-	if o == "--debug":
+	if o in ("-D", "--debug"):
 	    debug_mode = 1;
 
+    msg_out("pyprofgen version %s  \n" % pyprofgen_version);
+
+    debug("Debug mode: %d" % debug_mode);
+    init();
+    debug("Base Library directory: %s" % PPG_LIB_DIR);
+    debug("Output HTML directory: %s" % HTML_DIR);
+    debug("Output MISC directory: %s" % MISC_DIR);
+    
     if len(arg) != 1 and len(arg) != 2:
 	error(0, "wrong number of argument(s).")
 	error(1, "use '-h' option for more.")
@@ -956,7 +1007,6 @@ def main():
 
 #def dummy():
     # generate
-    msg_out("pyprofgen version %s  \n" % pyprofgen_version)
 
     cbuilder = cgraph_builder(EXE_FILE, MON_FILE);
     cbuilder.parse_cgraph();
