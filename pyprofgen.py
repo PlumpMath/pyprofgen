@@ -622,6 +622,30 @@ class cgraph_builder:
         cycle = 0;
         refer = 0;
 	self.gid = 0;
+        index_line = False;
+        i = 0;
+        
+        matched = re.compile(r"[^ \n]+").findall(line);
+
+        if (len(matched) < 5 or len(matched) > 7:
+            return None;                # Euh??
+
+        if matched[0][0] == "[":
+            index_line = True;
+
+        if index_line:
+            index = int(re.compile(r"\[([0-9]+)\]").match(matched[i++]).group(1));
+            tm_time = float(matched[i++]);
+
+        tm_self = float(matched[i++]);
+        tm_child = float(matched[i++]);
+
+        if not index_line or len(matched) == 7:
+            called = 0;
+        else:
+            called = 0;
+
+                            
         if line[0] != " ":              # we have 'index' field.
             index = int(re.compile(r"^\[([0-9]+)\]").match(line).group(1));
         if line[10] != " ":             # we have 'time' field.
@@ -648,7 +672,8 @@ class cgraph_builder:
                 end = line.find(" ", 36);
                 called_recurse = int(line[37:end]);
             else:
-                print "error";          # error: don't understand.
+                error(0, "error: unrecognized line"); # error: don't understand.
+                print "line: %s" % line;
         if end == 0:
             start = 35;
         else:
