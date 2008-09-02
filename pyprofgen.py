@@ -974,7 +974,7 @@ Generate HTML documents from gmon.out
   -h, --help            Show help message
   -v, --version         Print version information
 
-Report bugs to <cinsky@gmail.com>.
+Report bugs to <cinsk@cinsk.org>.
 
 """
 
