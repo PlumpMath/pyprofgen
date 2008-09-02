@@ -627,18 +627,21 @@ class cgraph_builder:
         
         matched = re.compile(r"[^ \n]+").findall(line);
 
-        if (len(matched) < 5 or len(matched) > 7:
+        if len(matched) < 5 or len(matched) > 7:
             return None;                # Euh??
 
         if matched[0][0] == "[":
             index_line = True;
 
         if index_line:
-            index = int(re.compile(r"\[([0-9]+)\]").match(matched[i++]).group(1));
-            tm_time = float(matched[i++]);
+            index = int(re.compile(r"\[([0-9]+)\]").match(matched[i]).group(1));
+            i += 1;
+            tm_time = float(matched[i]);
+            i += 1;
 
-        tm_self = float(matched[i++]);
-        tm_child = float(matched[i++]);
+        tm_self = float(matched[i]);
+        tm_child = float(matched[i + 1]);
+        i += 2;
 
         if not index_line or len(matched) == 7:
             called = 0;
