@@ -53,12 +53,12 @@ As the package name implies, PyProfGen uses Python to interpret the
 output of `gprof(1)`.  I tested on two environments:
 
 - Redhat Fedora Core 2:
-- Python version 2.3.3
-- graphviz version 1.12
-- gprof(1) in binutils version 2.15.90
+  + Python version 2.3.3
+  + graphviz version 1.12
+  + gprof(1) in binutils version 2.15.90
 
 - Gentoo Linux 2005.0
-- Python version 2.3.5
-- graphviz version 2.2.1
-- gprof(1) in binutils version 2.15.92
+  + Python version 2.3.5
+  + graphviz version 2.2.1
+  + gprof(1) in binutils version 2.15.92
 
